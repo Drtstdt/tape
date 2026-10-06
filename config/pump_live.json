@@ -1,0 +1,42 @@
+{
+ "require_social": true,
+ "require_twitter": false,
+ "twitter_kinds_ok": [
+  "profile",
+  "tweet",
+  "community"
+ ],
+ "max_link_reuse": 2,
+ "max_name_reuse": 0,
+ "max_creator_launches_24h": 3,
+ "farm_min_launches": 20,
+ "max_dev_initial_share": 0.1,
+ "max_dev_hold_share": 0.1,
+ "max_top10_share": 0.5,
+ "max_first_slot_share": 0.25,
+ "max_watched": 800,
+ "watch_ms": 3660000,
+ "max_decision_ms": 3600000,
+ "floor_q_gain": 2.53,
+ "tps": [
+  0.2,
+  0.3,
+  0.6,
+  1.0
+ ],
+ "sls": [
+  -0.15,
+  -0.3,
+  -0.5
+ ],
+ "horizons_min": [
+  5,
+  10,
+  30
+ ],
+ "size_sol": 0.5,
+ "latency_slots": 2,
+ "tip_sol": 0.001,
+ "window_days": 30.0,
+ "min_trades": 200
+}

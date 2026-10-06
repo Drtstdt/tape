@@ -1,0 +1,15 @@
+data/
+*.duckdb
+*.parquet
+models/
+research_out/
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# never commit large raw exports / credentials
+bigquery_export.json
+*.env

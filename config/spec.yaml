@@ -1,0 +1,135 @@
+# Every threshold in the system. Resolution order: base -> preset -> band.
+#
+# Each value carries a `status`:
+#   unvalidated  a reasoned starting point. Nothing may be trusted with real
+#                money while it says this.
+#   fitted       derived from a walk-forward run; `fitted_by` names the run id.
+#   frozen       cleared the real-money gate and must not move without one.
+#
+# A parameter nobody can trace to a measurement acquires authority by being
+# old. The status field is how that is prevented.
+
+version: 1
+status: unvalidated
+
+execution:
+  fee_pct: 0.01                    # status: unvalidated (venue-dependent; verify per DEX)
+  fixed_cost_sol: null             # status: MISSING -- measure before trusting any backtest.
+                                   # Until this is a number, every result in this
+                                   # repo is optimistic by an unmeasured amount,
+                                   # and the amount is larger than any edge found.
+  min_cost_floor_multiple: 3.0
+
+capital:
+  starting_sol: 10.0               # paper
+  max_concurrent_positions: 8
+  daily_loss_cap_sol: 0.5          # hard stop; halts new entries for the day
+
+confidence:
+  breakeven_win_rate: 0.296        # measured: avg win +52.4 / avg loss -22.0
+  probability_margin: 0.04
+  min_credibility: 0.15
+  kelly_fraction: 0.10             # tenth, not quarter -- see docs/DECISIONS.md D7
+  max_position_fraction: 0.02      # must not bind for every p -- see D8
+  payoff_ratio: 2.38
+
+rails:                             # never fitted, never overruled by the model
+  min_liquidity_usd: 13000
+  max_position_to_liquidity_pct: 1.0
+  min_age_ms: 150000
+  max_top_holder_pct: 80
+  require_mint_authority_renounced: true
+  require_freeze_authority_renounced: true
+  min_lp_locked_pct: null
+  max_creator_rug_rate: 0.6
+  reject_blacklisted_creator: true
+  min_attributed_trades: 3
+  max_largest_buyer_share: 0.4
+  min_unique_buyers: 3
+
+bars:
+  kind: dollar
+  fraction_of_liquidity: 0.01      # one bar = 1% of pool depth traded
+  floor_quote: 0.05
+
+labels:
+  horizons_ms: [900000, 1800000, 10800000]
+  barriers:
+    A_graduate: {upper_multiple: 1.8, lower_pct: -0.35, horizon_ms: 2700000}
+    B_mid:      {upper_multiple: 1.6, lower_pct: -0.30, horizon_ms: 28800000}
+    C_deep:     {upper_multiple: 1.4, lower_pct: -0.25, horizon_ms: 259200000}
+
+bands:                             # USD, so they stay meaningful as SOL moves
+  order: [A_graduate, B_mid, C_deep, D_major]
+  sol_price_usd: null              # LIVE FEED REQUIRED. v3 ran for weeks on a
+                                   # hardcoded 101.75 and every band boundary
+                                   # was wrong by however far SOL had moved.
+  A_graduate: {max_liquidity_usd: 50000,   tradeable: true,  ceiling_multiple: 10}
+  B_mid:      {max_liquidity_usd: 300000,  tradeable: true,  ceiling_multiple: 10}
+  C_deep:     {max_liquidity_usd: 2000000, tradeable: true,  ceiling_multiple: 20}
+  D_major:    {max_liquidity_usd: null,    tradeable: true,  ceiling_multiple: 20}
+  # S_curve (pre-graduation bonding curve) is DELIBERATELY ABSENT from `order`.
+  # Collection still covers it; trading does not. At a 0.006 SOL stake the fixed
+  # fee alone is 0.75% per side and the round trip is 3.50%, against 2.00% in a
+  # real pool. That 1.5pp is bought by changing venue, not by tuning anything,
+  # and it is larger than every edge measured in three generations of this project.
+
+exits:                             # ported from v3, with the review's corrections
+  category_a:
+    require_actor_attribution: true
+    liquidity_price_divergence: true
+    coordinated_sell:
+      min_cluster_wallets: 2       # v3 fired on ANY creator dust sale:
+      min_pct_of_liquidity: 2.0    # 428 exits, -14.8%, 18% of the book's basis
+  cost_recovery:
+    trigger_multiple: 1.8          # status: fitted (ablation: 1.8 > 1.6 > 1.4 > 1.25)
+    exit_fraction: 0.5             # status: unvalidated -- the ablation compared trigger
+                                    # multiples only; this fraction was never isolated
+                                    # and fitted on its own. At 0.5 fraction, 1.8x
+                                    # recovers 90% of capital before fees, not 100%
+                                    # -- see D18 for why that matters.
+    rugpull_gate: reuse_rails      # status: decided (D18) -- re-run evaluate_rails()
+                                    # + exits.category_a at the instant the trigger
+                                    # fires. Never a fresh judgment call.
+    remainder_floor: entry_price   # status: decided (D18) -- breakeven measured
+                                    # against the ORIGINAL position's entry price.
+  candidate_partial_exit_2x:       # status: unvalidated -- D18. This is the user's
+                                    # "+100%, sell half" rule. NOT yet compared to
+                                    # cost_recovery (above) in an ablation -- do not
+                                    # prefer it over the fitted 1.8 trigger without
+                                    # running one. Its only advantage on paper is that
+                                    # 2.0 * 0.5 = 1.0: it recovers capital EXACTLY,
+                                    # which 1.8/0.5 does not.
+    trigger_multiple: 2.0
+    exit_fraction: 0.5
+    rugpull_gate: reuse_rails
+    remainder_floor: entry_price
+  flow_reversal:
+    mode: partial                  # was `full` in v3: -8.5% on 50.6% of basis,
+    fraction: 0.5                  # and the paired ablation says removing it
+                                   # is +2.42pp CI [+1.16, +3.91]
+  adaptive_stop_loss:
+    enabled: false                 # -59.8% realised against a configured 10-35%
+  trailing_stop:
+    trail_pct: 15
+    arms_on: profit_taking_partial_only   # NEVER on a stop-loss partial.
+                                          # Arming on any partial averaged
+                                          # -51.22% over 23 positions while the
+                                          # other 316 averaged +3.71%.
+  time_stop:
+    clock: token_age               # NOT hold time -- v3 conflated the two and
+                                   # made survivor_ms unreachable
+    wall_clock_sweep_ms: 5000      # exits must not depend on a swap arriving
+
+drift:
+  psi_warn: 0.2                    # halve size
+  psi_halt: 0.3                    # stop and retrain
+  retrain_schedule: weekly
+
+real_money_gate:                   # pre-registered; cannot move after seeing results
+  min_closed_trades_per_band: 200
+  min_distinct_days: 14
+  every_fold_positive: true
+  survives_2x_cost_sensitivity: true
+  survives_measured_fixed_cost: true
+  live_hit_rate_within_walkforward_ci: true

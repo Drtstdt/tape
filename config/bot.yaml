@@ -1,0 +1,103 @@
+# tape-one bot spec -- the single source of truth for every threshold.
+# Loaded by both engines (backtest and live). Every value carries a status:
+#   unvalidated = my starting value, not yet fitted against a measurement
+#   fitted      = set from a measured run (never yet -- record the run id)
+#   frozen      = deliberately frozen after gates cleared
+# Overriding a path absent from the spec is an error, never a silent no-op.
+
+name: tape-one
+version: 1
+status: unvalidated
+
+# ---- costs (docs/PLAN.md: until fixed_cost_sol is measured, every result
+#      is optimistic by an unmeasured amount) ------------------------------
+fee_pct: 0.01            # proportional, per side (pump.fun curve fee ~1%)
+fixed_cost_sol: 0.0005   # base + priority fee per transaction; MEASURE THIS
+extra_slippage_pct: 0.0  # beyond the AMM curve; adverse selection
+
+# ---- bar construction (tape/bars.py band_bar_threshold) ------------------
+bar_fraction_of_liquidity: 0.01
+bar_floor_quote: 0.05
+
+max_open_positions: 6
+
+# ---- entry: rails -> accumulation gate -> model -> sizing ----------------
+entry:
+  min_age_ms: 150000
+  min_bars: 5
+  min_unique_buyers_10: 3.0
+  max_largest_buyer_share_10: 0.6
+  max_top_holder_pct: 80.0
+  max_position_to_liquidity_pct: 1.0
+  min_cost_floor_multiple: 3.0
+  gate_netflow_k: 10
+  gate_breadth_k: 10
+  gate_require_positive_netflow: true
+  gate_require_buyer_breadth: true
+  gate_max_flow_price_divergence: 0.0
+  gate_min_liq_slope_10: -0.05
+  gate_max_rsi: 85.0
+  gate_max_creator_sold_over_liq: 0.10
+  probability_margin: 0.04
+  min_credibility: 0.15
+  require_model: false      # false = rule-only mode enters flat and LOGS it
+  kelly_fraction: 0.10
+  max_position_fraction: 0.02
+  capital_sol: 100.0
+  margin_bounds: [0.02, 0.12]
+  kelly_bounds: [0.03, 0.25]
+  status: unvalidated
+
+# ---- exit state machine ---------------------------------------------------
+exits:
+  cat_a_divergence_bars: 2     # sustained liq/price divergence -> full exit
+  cat_a_liq_drawdown: -0.35    # OR liquidity down 35% from its own peak
+  remainder_floor_multiple: 1.0  # after the partial, never below breakeven
+  status: unvalidated
+
+# ---- auto-correct (opt-in via --autocorrect) ------------------------------
+autocorrect:
+  enabled: false
+  psi_halve: 0.20
+  psi_halt: 0.30
+  psi_window_rows: 2000
+  tune_min_trades: 30
+  tune_window: 30
+  tune_hysteresis: 0.02
+  recal_buffer_cap: 4000
+  recal_min_new: 250
+  daily_loss_cap_sol: 10.0
+  drawdown_halt_pct: 0.25
+  kill_switch_path: data/bot/kill_switch
+  log_path: data/bot/autocorrect_log.csv
+  status: unvalidated
+
+# ---- liquidity bands (exit economics per band) -----------------------------
+bands:
+  - name: B_small
+    min_liquidity_sol: 15.0
+    upper_multiple: 2.0
+    lower_pct: -0.40
+    horizon_ms: 2700000
+    tp_fraction: 0.5
+    trail_pct: 0.30
+    cooldown_ms: 60000
+    status: unvalidated
+  - name: B_mid
+    min_liquidity_sol: 75.0
+    upper_multiple: 1.6
+    lower_pct: -0.30
+    horizon_ms: 10800000
+    tp_fraction: 0.5
+    trail_pct: 0.25
+    cooldown_ms: 120000
+    status: unvalidated
+  - name: B_deep
+    min_liquidity_sol: 300.0
+    upper_multiple: 1.4
+    lower_pct: -0.25
+    horizon_ms: 43200000
+    tp_fraction: 0.5
+    trail_pct: 0.20
+    cooldown_ms: 300000
+    status: unvalidated

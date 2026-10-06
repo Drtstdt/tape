@@ -1,0 +1,19 @@
+# Core. Everything below the model layer is stdlib + these three.
+pandas>=2.2
+pyarrow>=16.0
+duckdb>=1.0
+numpy>=1.26
+
+# Modelling.
+lightgbm>=4.3
+scikit-learn>=1.4
+optuna>=3.6
+
+# Live ingestion.
+websockets>=12.0
+httpx>=0.27
+solana>=0.34          # pool account reads via Helius; no wallet keys, ever
+PyYAML>=6.0
+
+# Dev.
+pytest>=8.0
